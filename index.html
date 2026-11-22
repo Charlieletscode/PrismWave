@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PrismWave — Generative Audio-Visual Kaleidoscope</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Space Grotesk -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050510;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        .font-display {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        /* Glassmorphism Floating Dock */
+        .glass-dock {
+            background: rgba(12, 14, 26, 0.68);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        @keyframes pulseOrb {
+            0%, 100% { transform: scale(1); opacity: 0.85; }
+            50% { transform: scale(1.25); opacity: 1; }
+        }
+        .animate-orb {
+            animation: pulseOrb 2.8s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased selection:bg-indigo-500/30">
+
+    <!-- Main Full-Screen Interactive Canvas -->
+    <canvas id="prismCanvas"></canvas>
+
+    <!-- Top Floating Status Bar -->
+    <header class="fixed top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+        <!-- Top-Left Status Pill -->
+        <div class="glass-dock px-4 py-2 rounded-full flex items-center gap-3 pointer-events-auto">
+            <div id="statusDot" class="w-2.5 h-2.5 rounded-full bg-fuchsia-400 shadow-[0_0_12px_#e879f9] animate-orb"></div>
+            <h1 class="font-display font-bold text-sm sm:text-base tracking-wider bg-gradient-to-r from-white via-indigo-200 to-fuchsia-300 bg-clip-text text-transparent">
+                PRISMWAVE
+            </h1>
+            <span class="text-xs text-slate-400 border-l border-white/10 pl-3 font-mono" id="hudStats">
+                60 FPS &bull; 0 Nodes
+            </span>
+        </div>
+
+        <!-- Top-Right Audio & UI Visibility Controls -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="audioToggleBtn" title="Toggle Web Audio Synthesizer" class="glass-dock px-3.5 py-2 rounded-full flex items-center gap-2 text-xs font-medium text-slate-200 hover:bg-white/10 transition active:scale-95">
+                <i id="audioIcon" data-lucide="volume-x" class="w-4 h-4 text-rose-400"></i>
+                <span id="audioLabel" class="hidden sm:inline">Sound Off</span>
+            </button>
+
+            <button id="toggleUiBtn" title="Toggle Dock Visibility" class="glass-dock p-2.5 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition active:scale-95">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Onboarding Hint Pill -->
+    <div id="hintToast" class="fixed top-20 left-1/2 -translate-x-1/2 z-10 pointer-events-none transition-opacity duration-700">
+        <div class="glass-dock px-4 py-1.5 rounded-full text-xs text-slate-300 flex items-center gap-2 shadow-lg whitespace-nowrap">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Click or drag to weave harmonic light &amp; synth chords</span>
+        </div>
+    </div>
+
+    <!-- Bottom Floating Glassmorphism Control Dock -->
+    <aside id="controlDock" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 w-[96%] max-w-5xl transition-all duration-300 ease-out">
+        <div class="glass-dock rounded-2xl sm:rounded-3xl p-3 sm:p-4 flex flex-col gap-3">
+            
+            <!-- Row 1: Visual Modes, Symmetry Selector & Utility Actions -->
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                
+                <!-- Visual Modes -->
+                <div class="flex items-center bg-black/35 p-1 rounded-xl border border-white/5 overflow-x-auto no-scrollbar">
+                    <button data-mode="kaleidoscope" class="mode-btn active flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-white/15 text-white shadow-sm whitespace-nowrap">
+                        <i data-lucide="aperture" class="w-3.5 h-3.5 text-fuchsia-400"></i>
+                        <span>Kaleidoscope</span>
+                    </button>
+                    <button data-mode="ripples" class="mode-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all whitespace-nowrap">
+                        <i data-lucide="radio" class="w-3.5 h-3.5 text-cyan-400"></i>
+                        <span>Harmonic Ripples</span>
+                    </button>
+                    <button data-mode="orbitals" class="mode-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all whitespace-nowrap">
+                        <i data-lucide="hexagon" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span>Sacred Orbitals</span>
+                    </button>
+                </div>
+
+                <!-- Radial Symmetry Selector -->
+                <div class="flex items-center gap-1.5 bg-black/35 p-1 rounded-xl border border-white/5">
+                    <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold px-2 hidden md:inline">Symmetry</span>
+                    <button data-sym="4" class="sym-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium text-slate-400 hover:text-white transition">4x</button>
+                    <button data-sym="6" class="sym-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium text-slate-400 hover:text-white transition">6x</button>
+                    <button data-sym="8" class="sym-btn active px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-white/15 text-white transition">8x</button>
+                    <button data-sym="12" class="sym-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium text-slate-400 hover:text-white transition">12x</button>
+                </div>
+
+                <!-- Auto-Play Generative, Snapshot & Clear -->
+                <div class="flex items-center gap-1.5 ml-auto sm:ml-0">
+                    <button id="autoPlayBtn" title="Toggle Autonomous Generative Performance" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/15 text-slate-300 border border-white/10 transition active:scale-95">
+                        <i data-lucide="play" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        <span>Auto-Play</span>
+                    </button>
+                    <button id="snapshotBtn" title="Save High-Res PNG Snapshot" class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-white/10 transition active:scale-95">
+                        <i data-lucide="camera" class="w-4 h-4"></i>
+                    </button>
+                    <button id="clearBtn" title="Clear Canvas" class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border border-white/10 transition active:scale-95">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Row 2: Musical Scales & Color Themes -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+                
+                <!-- Musical Scale Selector -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mr-1 flex items-center gap-1">
+                        <i data-lucide="music" class="w-3 h-3 text-indigo-400"></i> Scale
+                    </span>
+                    <button data-scale="pentatonic" class="scale-btn active px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 transition whitespace-nowrap">
+                        Pentatonic
+                    </button>
+                    <button data-scale="cosmicMinor" class="scale-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        Cosmic Minor
+                    </button>
+                    <button data-scale="zenLydian" class="scale-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        Zen Lydian
+                    </button>
+                    <button data-scale="cyberpunk" class="scale-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        Cyberpunk
+                    </button>
+                </div>
+
+                <!-- Color Theme Selector -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar ml-auto">
+                    <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mr-1">Theme</span>
+                    
+                    <button data-theme="prismNeon" class="theme-btn active flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25 transition whitespace-nowrap">
+                        <span class="flex -space-x-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ff2a85]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#00f5d4]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#7b2cbf]"></span>
+                        </span>
+                        <span>Prism Neon</span>
+                    </button>
+
+                    <button data-theme="biolume" class="theme-btn flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        <span class="flex -space-x-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#00ff9d]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#00b4d8]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#48bfe3]"></span>
+                        </span>
+                        <span>Biolume</span>
+                    </button>
+
+                    <button data-theme="solarGold" class="theme-btn flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        <span class="flex -space-x-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ffbe0b]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#fb5607]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ff006e]"></span>
+                        </span>
+                        <span>Solar Gold</span>
+                    </button>
+
+                    <button data-theme="vaporwave" class="theme-btn flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/25 text-slate-400 hover:text-white border border-transparent transition whitespace-nowrap">
+                        <span class="flex -space-x-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ff71ce]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#01cdfe]"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#b967ff]"></span>
+                        </span>
+                        <span>Vaporwave</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </aside>
+
+    <script>
+        /**
+         * PrismWave — Generative Audio-Visual Synthesizer & Fluid Kaleidoscope Sandbox
+         * Single-file HTML5 Canvas + Web Audio API procedural synthesizer.
+         */
+        (function () {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+
+            const canvas = document.getElementById('prismCanvas');
+            const ctx = canvas.getContext('2d', { alpha: false });
+            const hudStats = document.getElementById('hudStats');
+            const hintToast = document.getElementById('hintToast');
+            const statusDot = document.getElementById('statusDot');
+
+            // Color Themes (Deep Obsidian-Indigo backdrops + high-luminance additive palettes)
+            const THEMES = {
+                prismNeon: {
+                    bg: '#050510',
+                    trail: 'rgba(5, 5, 16, 0.14)',
+                    colors: ['#ff2a85', '#00f5d4', '#3a86ff', '#9b5de5', '#fee440'],
+                    dot: '#e879f9'
+                },
+                biolume: {
+                    bg: '#030811',
+                    trail: 'rgba(3, 8, 17, 0.14)',
+                    colors: ['#00ff9d', '#00e5ff', '#00b4d8', '#72efdd', '#5e60ce'],
+                    dot: '#00ff9d'
+                },
+                solarGold: {
+                    bg: '#0a050d',
+                    trail: 'rgba(10, 5, 13, 0.14)',
+                    colors: ['#ffbe0b', '#fb5607', '#ff006e', '#ff9e00', '#ffd166'],
+                    dot: '#ffbe0b'
+                },
+                vaporwave: {
+                    bg: '#080414',
+                    trail: 'rgba(8, 4, 20, 0.14)',
+                    colors: ['#ff71ce', '#01cdfe', '#05ffa1', '#b967ff', '#fffb96'],
+                    dot: '#01cdfe'
+                }
+            };
+
+            // Musical Scales (Frequencies in Hz across 2.5 octaves)
+            const SCALES = {
+                pentatonic:  [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00, 1046.50],
+                cosmicMinor: [220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00],
+                zenLydian:   [261.63, 293.66, 329.63, 369.99, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25, 739.99],
+                cyberpunk:   [146.83, 174.61, 220.00, 261.63, 277.18, 329.63, 440.00, 523.25, 554.37, 659.25, 880.00]
+            };
+
+            // Application State
+            const state = {
+                mode: 'kaleidoscope', // 'kaleidoscope' | 'ripples' | 'orbitals'
+                symmetry: 8,
+                scale: 'pentatonic',
+                theme: 'prismNeon',
+                autoPlay: false,
+                uiVisible: true,
+                audioEnabled: false,
+                colorIndex: 0
+            };
+
+            // =========================================================================
+            // PROCEDURAL WEB AUDIO API SYNTHESIZER
+            // =========================================================================
+            class PrismSynth {
+                constructor() {
+                    this.ctx = null;
+                    this.masterGain = null;
+                    this.delayNode = null;
+                    this.feedbackGain = null;
+                    this.lastNoteTime = 0;
+                }
+
+                init() {
+                    if (this.ctx) return;
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+
+                    // Master output with gentle limiter/compressor feel
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.value = 0.28;
+
+                    // Stereo-like ambient ping-pong/echo delay
+                    this.delayNode = this.ctx.createDelay(2.0);
+                    this.delayNode.delayTime.value = 0.34;
+
+                    this.feedbackGain = this.ctx.createGain();
+                    this.feedbackGain.gain.value = 0.38;
+
+                    const delayFilter = this.ctx.createBiquadFilter();
+                    delayFilter.type = 'lowpass';
+                    delayFilter.frequency.value = 1800;
+
+                    this.delayNode.connect(delayFilter);
+                    delayFilter.connect(this.feedbackGain);
+                    this.feedbackGain.connect(this.delayNode);
+                    delayFilter.connect(this.masterGain);
+
+                    this.masterGain.connect(this.ctx.destination);
+                }
+
+                unlockAndEnable() {
+                    this.init();
+                    if (this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                    state.audioEnabled = true;
+                    updateAudioUi();
+                }
+
+                toggle() {
+                    if (!state.audioEnabled) {
+                        this.unlockAndEnable();
+                        // Play welcoming harmonic chord
+                        this.playChord([0, 2, 4, 7]);
+                    } else {
+                        state.audioEnabled = false;
+                        updateAudioUi();
+                    }
+                }
+
+                getFreqFromNormalized(normY) {
+                    const notes = SCALES[state.scale];
+                    const clamped = Math.max(0, Math.min(0.999, 1 - normY));
+                    const idx = Math.floor(clamped * notes.length);
+                    return notes[idx];
+                }
+
+                playNote(normY = 0.5, velocity = 0.6, type = 'chime') {
+                    if (!state.audioEnabled || !this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    if (now - this.lastNoteTime < 0.045) return; // Rate-limit drag notes
+                    this.lastNoteTime = now;
+
+                    const freq = this.getFreqFromNormalized(normY);
+
+                    // Primary harmonic oscillator
+                    const osc = this.ctx.createOscillator();
+                    const subOsc = this.ctx.createOscillator();
+                    const env = this.ctx.createGain();
+
+                    osc.type = type === 'ripple' ? 'sine' : (state.scale === 'cyberpunk' ? 'triangle' : 'sine');
+                    subOsc.type = 'triangle';
+
+                    osc.frequency.setValueAtTime(freq, now);
+                    // Sub-octave warmth
+                    subOsc.frequency.setValueAtTime(freq * 0.5, now);
+
+                    const peak = Math.min(0.35, 0.08 + velocity * 0.22);
+                    const attack = type === 'pad' ? 0.12 : 0.015;
+                    const release = type === 'ripple' ? 1.6 : (type === 'pad' ? 2.2 : 0.95);
+
+                    env.gain.setValueAtTime(0.0001, now);
+                    env.gain.exponentialRampToValueAtTime(peak, now + attack);
+                    env.gain.exponentialRampToValueAtTime(0.0001, now + attack + release);
+
+                    const subGain = this.ctx.createGain();
+                    subGain.gain.value = 0.35;
+
+                    osc.connect(env);
+                    subOsc.connect(subGain);
+                    subGain.connect(env);
+
+                    env.connect(this.masterGain);
+                    env.connect(this.delayNode);
+
+                    osc.start(now);
+                    subOsc.start(now);
+                    osc.stop(now + attack + release + 0.05);
+                    subOsc.stop(now + attack + release + 0.05);
+                }
+
+                playSubBass(freq = 65.41) {
+                    if (!state.audioEnabled || !this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const env = this.ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq * 1.4, now);
+                    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.18);
+
+                    env.gain.setValueAtTime(0.001, now);
+                    env.gain.exponentialRampToValueAtTime(0.32, now + 0.03);
+                    env.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+
+                    osc.connect(env);
+                    env.connect(this.masterGain);
+                    osc.start(now);
+                    osc.stop(now + 1.25);
+                }
+
+                playChord(indices = [0, 2, 4]) {
+                    if (!state.audioEnabled || !this.ctx) return;
+                    const notes = SCALES[state.scale];
+                    indices.forEach((noteIdx, i) => {
+                        const freq = notes[noteIdx % notes.length];
+                        const normY = 1 - (noteIdx % notes.length) / notes.length;
+                        setTimeout(() => {
+                            this.lastNoteTime = 0;
+                            this.playNote(normY, 0.45, 'pad');
+                        }, i * 55);
+                    });
+                }
+            }
+
+            const synth = new PrismSynth();
+
+            // =========================================================================
+            // CANVAS SETUP & HIGH-DPI HANDLING
+            // =========================================================================
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+            let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            function resizeCanvas() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = THEMES[state.theme].bg;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            function nextColor() {
+                const palette = THEMES[state.theme].colors;
+                const color = palette[state.colorIndex % palette.length];
+                state.colorIndex++;
+                return color;
+            }
+
+            // =========================================================================
+            // VISUAL ENTITIES (KALEIDOSCOPE RIBBONS, HARMONIC RIPPLES, SACRED ORBITALS)
+            // =========================================================================
+            let ribbonStrokes = [];
+            let ripples = [];
+            let orbitals = [];
+            let sparkles = [];
+
+            // 1. Crystalline Sparkle / Dust Particle
+            class Sparkle {
+                constructor(x, y, vx, vy, color, size = 2) {
+                    this.x = x;
+                    this.y = y;
+                    this.vx = vx;
+                    this.vy = vy;
+                    this.color = color;
+                    this.size = size;
+                    this.life = 1.0;
+                    this.decay = 0.012 + Math.random() * 0.016;
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.vx *= 0.97;
+                    this.vy *= 0.97;
+                    this.life -= this.decay;
+                    return this.life > 0;
+                }
+                draw(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, this.life);
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // 2. Kaleidoscope Symmetric Laser Ribbon Segment
+            class RibbonSegment {
+                constructor(x1, y1, x2, y2, color, lineWidth, symmetry) {
+                    this.x1 = x1;
+                    this.y1 = y1;
+                    this.x2 = x2;
+                    this.y2 = y2;
+                    this.color = color;
+                    this.lineWidth = lineWidth;
+                    this.symmetry = symmetry;
+                    this.life = 1.0;
+                    this.decay = 0.0085;
+                }
+                update() {
+                    this.life -= this.decay;
+                    return this.life > 0;
+                }
+                draw(ctx, cx, cy) {
+                    const dx1 = this.x1 - cx;
+                    const dy1 = this.y1 - cy;
+                    const dx2 = this.x2 - cx;
+                    const dy2 = this.y2 - cy;
+                    const step = (Math.PI * 2) / this.symmetry;
+
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.strokeStyle = this.color;
+                    ctx.fillStyle = this.color;
+                    ctx.lineCap = 'round';
+                    ctx.lineWidth = Math.max(0.8, this.lineWidth * this.life);
+                    ctx.globalAlpha = Math.max(0, this.life * 0.9);
+
+                    for (let i = 0; i < this.symmetry; i++) {
+                        ctx.save();
+                        ctx.rotate(i * step);
+
+                        // Primary radial arm
+                        ctx.beginPath();
+                        ctx.moveTo(dx1, dy1);
+                        ctx.lineTo(dx2, dy2);
+                        ctx.stroke();
+
+                        // Mirrored reflection arm
+                        ctx.scale(1, -1);
+                        ctx.beginPath();
+                        ctx.moveTo(dx1, dy1);
+                        ctx.lineTo(dx2, dy2);
+                        ctx.stroke();
+
+                        // Crystalline vertex node at endpoints
+                        if (this.life > 0.75) {
+                            ctx.beginPath();
+                            ctx.arc(dx2, dy2, this.lineWidth * 0.65, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+
+                        ctx.restore();
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // 3. Harmonic Resonant Ripple (Bouncing & Interfering Rings)
+            class HarmonicRipple {
+                constructor(x, y, color, normY) {
+                    this.x = x;
+                    this.y = y;
+                    this.vx = (Math.random() - 0.5) * 1.4;
+                    this.vy = (Math.random() - 0.5) * 1.4;
+                    this.radius = 6;
+                    this.maxRadius = Math.min(width, height) * (0.28 + Math.random() * 0.18);
+                    this.speed = 2.6 + Math.random() * 1.4;
+                    this.color = color;
+                    this.normY = normY;
+                    this.alpha = 0.95;
+                    this.echoes = 3;
+                    this.bounces = 0;
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.radius += this.speed;
+                    this.alpha = Math.max(0, 1 - this.radius / this.maxRadius);
+
+                    // Edge reflection resonance
+                    if (this.bounces < 2) {
+                        if (this.x - this.radius < 0 || this.x + this.radius > width) {
+                            this.vx *= -1;
+                            this.bounces++;
+                            synth.playNote(this.normY, 0.25, 'ripple');
+                        }
+                        if (this.y - this.radius < 0 || this.y + this.radius > height) {
+                            this.vy *= -1;
+                            this.bounces++;
+                            synth.playNote(this.normY, 0.25, 'ripple');
+                        }
+                    }
+
+                    return this.radius < this.maxRadius;
+                }
+                draw(ctx) {
+                    ctx.save();
+                    for (let e = 0; e < this.echoes; e++) {
+                        const r = this.radius - e * 16;
+                        if (r <= 2) continue;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+                        ctx.strokeStyle = this.color;
+                        ctx.globalAlpha = this.alpha * (1 - e * 0.28);
+                        ctx.lineWidth = Math.max(1, 3 - e * 0.7);
+                        ctx.stroke();
+                    }
+
+                    // Core glowing node
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, 4 * this.alpha + 1, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = this.alpha;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // 4. Sacred Geometry Orbital (Rotating Polyhedral Mandala)
+            class SacredOrbital {
+                constructor(x, y, color, sides, normY) {
+                    this.x = x;
+                    this.y = y;
+                    this.color = color;
+                    this.sides = sides; // e.g. 3, 4, 5, 6, 8
+                    this.normY = normY;
+                    this.baseRadius = 26 + Math.random() * 44;
+                    this.angle = Math.random() * Math.PI * 2;
+                    this.spinSpeed = (Math.random() < 0.5 ? -1 : 1) * (0.012 + Math.random() * 0.018);
+                    this.pulsePhase = 0;
+                    this.life = 1.0;
+                    this.decay = 0.0022;
+                }
+                pulse() {
+                    this.pulsePhase = 1.0;
+                    synth.playNote(this.normY, 0.35, 'chime');
+                }
+                update() {
+                    this.angle += this.spinSpeed;
+                    this.pulsePhase *= 0.92;
+                    this.life -= this.decay;
+                    return this.life > 0;
+                }
+                draw(ctx) {
+                    const r = this.baseRadius * (1 + this.pulsePhase * 0.35);
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.angle);
+                    ctx.strokeStyle = this.color;
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = Math.min(1, this.life * 1.4) * (0.65 + this.pulsePhase * 0.35);
+                    ctx.lineWidth = 1.6 + this.pulsePhase * 1.5;
+
+                    // Outer sacred circle
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    // Star / Polygon web connecting every vertex
+                    const verts = [];
+                    for (let i = 0; i < this.sides; i++) {
+                        const a = (i / this.sides) * Math.PI * 2;
+                        verts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+                    }
+
+                    ctx.beginPath();
+                    for (let i = 0; i < verts.length; i++) {
+                        for (let j = i + 1; j < verts.length; j++) {
+                            ctx.moveTo(verts[i].x, verts[i].y);
+                            ctx.lineTo(verts[j].x, verts[j].y);
+                        }
+                    }
+                    ctx.stroke();
+
+                    // Glowing vertex nodes
+                    for (let i = 0; i < verts.length; i++) {
+                        ctx.beginPath();
+                        ctx.arc(verts[i].x, verts[i].y, 2.5 + this.pulsePhase * 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    ctx.restore();
+                }
+            }
+
+            // =========================================================================
+            // INTERACTION & SPAWNING LOGIC
+            // =========================================================================
+            const pointer = {
+                isDown: false,
+                x: width / 2,
+                y: height / 2,
+                prevX: width / 2,
+                prevY: height / 2,
+                hasInteracted: false
+            };
+
+            function emitSymmetricSparkles(x, y, count = 6) {
+                const cx = width / 2;
+                const cy = height / 2;
+                const dx = x - cx;
+                const dy = y - cy;
+                const step = (Math.PI * 2) / state.symmetry;
+                const color = nextColor();
+
+                for (let i = 0; i < count; i++) {
+                    const arm = i % state.symmetry;
+                    const theta = arm * step;
+                    const rx = cx + dx * Math.cos(theta) - dy * Math.sin(theta);
+                    const ry = cy + dx * Math.sin(theta) + dy * Math.cos(theta);
+                    const angle = Math.random() * Math.PI * 2;
+                    const spd = 0.6 + Math.random() * 2.2;
+                    sparkles.push(new Sparkle(rx, ry, Math.cos(angle) * spd, Math.sin(angle) * spd, color, 2.2));
+                }
+            }
+
+            function handleInteractionPoint(x, y, prevX, prevY, isClick = false) {
+                const normY = Math.max(0, Math.min(1, y / height));
+                const speed = Math.hypot(x - prevX, y - prevY);
+                const velocity = Math.min(1, 0.25 + speed / 35);
+
+                if (state.mode === 'kaleidoscope') {
+                    const color = nextColor();
+                    const lw = Math.min(7, 2 + speed * 0.14);
+                    ribbonStrokes.push(new RibbonSegment(prevX, prevY, x, y, color, lw, state.symmetry));
+                    if (isClick || Math.random() < 0.45) {
+                        emitSymmetricSparkles(x, y, state.symmetry);
+                    }
+                    synth.playNote(normY, velocity, 'chime');
+                } else if (state.mode === 'ripples') {
+                    if (isClick || speed > 14) {
+                        const color = nextColor();
+                        ripples.push(new HarmonicRipple(x, y, color, normY));
+                        synth.playNote(normY, velocity, 'ripple');
+                        if (isClick) {
+                            synth.playSubBass(synth.getFreqFromNormalized(normY) * 0.25);
+                        }
+                    }
+                } else if (state.mode === 'orbitals') {
+                    if (isClick || speed > 28) {
+                        const color = nextColor();
+                        const sides = [3, 4, 5, 6, 8][Math.floor(Math.random() * 5)];
+                        const orb = new SacredOrbital(x, y, color, sides, normY);
+                        orb.pulse();
+                        orbitals.push(orb);
+                        if (orbitals.length > 18) orbitals.shift();
+                    }
+                }
+            }
+
+            // =========================================================================
+            // AUTONOMOUS GENERATIVE PERFORMANCE (AUTO-PLAY) & SEQUENCER
+            // =========================================================================
+            let autoAngle = 0;
+            let lastStepTime = 0;
+            let seqStep = 0;
+
+            function updateAutoPlay(time) {
+                const cx = width / 2;
+                const cy = height / 2;
+                const maxR = Math.min(width, height) * 0.36;
+
+                if (state.autoPlay) {
+                    autoAngle += 0.028;
+                    const r = maxR * (0.35 + 0.55 * Math.sin(autoAngle * 0.65));
+                    const x = cx + Math.cos(autoAngle) * r;
+                    const y = cy + Math.sin(autoAngle * 1.5) * r * 0.85;
+
+                    if (state.mode === 'kaleidoscope') {
+                        const prevX = cx + Math.cos(autoAngle - 0.028) * (maxR * (0.35 + 0.55 * Math.sin((autoAngle - 0.028) * 0.65)));
+                        const prevY = cy + Math.sin((autoAngle - 0.028) * 1.5) * (maxR * (0.35 + 0.55 * Math.sin((autoAngle - 0.028) * 0.65))) * 0.85;
+                        handleInteractionPoint(x, y, prevX, prevY, false);
+                    } else if (time - lastStepTime > 420) {
+                        handleInteractionPoint(x, y, x, y, true);
+                    }
+                }
+
+                // Generative pulse sequencer for Sacred Orbitals
+                if (time - lastStepTime > 480) {
+                    lastStepTime = time;
+                    if (orbitals.length > 0) {
+                        const target = orbitals[seqStep % orbitals.length];
+                        target.pulse();
+                        seqStep++;
+                    }
+                }
+            }
+
+            // =========================================================================
+            // MAIN RENDER LOOP
+            // =========================================================================
+            let lastFrameTime = performance.now();
+            let fps = 60;
+            let lastHudUpdate = 0;
+
+            function render(time) {
+                const dt = time - lastFrameTime;
+                lastFrameTime = time;
+                if (dt > 0) {
+                    fps = Math.round(fps * 0.9 + (1000 / dt) * 0.1);
+                }
+
+                updateAutoPlay(time);
+
+                // Smooth phosphor trail fade
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = THEMES[state.theme].trail;
+                ctx.fillRect(0, 0, width, height);
+
+                // Additive luminance blending
+                ctx.globalCompositeOperation = 'lighter';
+
+                const cx = width / 2;
+                const cy = height / 2;
+
+                // Subtle center mandala core glow
+                const coreGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, 90);
+                const primaryColor = THEMES[state.theme].colors[0];
+                coreGrad.addColorStop(0, primaryColor + '22');
+                coreGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = coreGrad;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Update & Draw Kaleidoscope Ribbons
+                ribbonStrokes = ribbonStrokes.filter(seg => {
+                    const alive = seg.update();
+                    if (alive) seg.draw(ctx, cx, cy);
+                    return alive;
+                });
+
+                // Update & Draw Harmonic Ripples
+                ripples = ripples.filter(rip => {
+                    const alive = rip.update();
+                    if (alive) rip.draw(ctx);
+                    return alive;
+                });
+
+                // Update & Draw Sacred Geometry Orbitals + Constellation Links
+                if (orbitals.length > 1) {
+                    ctx.save();
+                    ctx.strokeStyle = THEMES[state.theme].colors[1];
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < orbitals.length - 1; i++) {
+                        const a = orbitals[i];
+                        const b = orbitals[i + 1];
+                        ctx.globalAlpha = Math.min(a.life, b.life) * 0.35;
+                        ctx.beginPath();
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+
+                orbitals = orbitals.filter(orb => {
+                    const alive = orb.update();
+                    if (alive) orb.draw(ctx);
+                    return alive;
+                });
+
+                // Update & Draw Sparkles
+                sparkles = sparkles.filter(sp => {
+                    const alive = sp.update();
+                    if (alive) sp.draw(ctx);
+                    return alive;
+                });
+
+                // Update HUD Stats periodically
+                if (time - lastHudUpdate > 250) {
+                    const activeNodes = ribbonStrokes.length + ripples.length + orbitals.length + sparkles.length;
+                    hudStats.textContent = `${Math.min(60, fps)} FPS • ${activeNodes} Nodes`;
+                    lastHudUpdate = time;
+                }
+
+                requestAnimationFrame(render);
+            }
+
+            // =========================================================================
+            // POINTER & TOUCH EVENTS
+            // =========================================================================
+            function getCanvasCoords(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            function onPointerDown(e) {
+                if (e.target !== canvas) return;
+
+                // Gracefully unlock Web Audio on first user interaction
+                if (!pointer.hasInteracted) {
+                    pointer.hasInteracted = true;
+                    hintToast.style.opacity = '0';
+                    if (!state.audioEnabled) {
+                        synth.unlockAndEnable();
+                    }
+                }
+
+                const { x, y } = getCanvasCoords(e);
+                pointer.isDown = true;
+                pointer.x = x;
+                pointer.y = y;
+                pointer.prevX = x;
+                pointer.prevY = y;
+
+                handleInteractionPoint(x, y, x - 1, y - 1, true);
+            }
+
+            function onPointerMove(e) {
+                if (!pointer.isDown) return;
+                const { x, y } = getCanvasCoords(e);
+                handleInteractionPoint(x, y, pointer.prevX, pointer.prevY, false);
+                pointer.prevX = x;
+                pointer.prevY = y;
+                pointer.x = x;
+                pointer.y = y;
+            }
+
+            function onPointerUp() {
+                pointer.isDown = false;
+            }
+
+            canvas.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', onPointerUp);
+
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                onPointerDown(e);
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (pointer.isDown) e.preventDefault();
+                onPointerMove(e);
+            }, { passive: false });
+
+            window.addEventListener('touchend', onPointerUp);
+
+            // =========================================================================
+            // UI CONTROLS WIRING
+            // =========================================================================
+            function updateAudioUi() {
+                const audioIcon = document.getElementById('audioIcon');
+                const audioLabel = document.getElementById('audioLabel');
+                if (state.audioEnabled) {
+                    audioIcon.setAttribute('data-lucide', 'volume-2');
+                    audioIcon.classList.remove('text-rose-400');
+                    audioIcon.classList.add('text-emerald-400');
+                    audioLabel.textContent = 'Synth On';
+                } else {
+                    audioIcon.setAttribute('data-lucide', 'volume-x');
+                    audioIcon.classList.remove('text-emerald-400');
+                    audioIcon.classList.add('text-rose-400');
+                    audioLabel.textContent = 'Sound Off';
+                }
+                if (window.lucide) lucide.createIcons();
+            }
+
+            document.getElementById('audioToggleBtn').addEventListener('click', () => {
+                pointer.hasInteracted = true;
+                hintToast.style.opacity = '0';
+                synth.toggle();
+            });
+
+            // Mode Buttons
+            const modeBtns = document.querySelectorAll('.mode-btn');
+            modeBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    modeBtns.forEach(b => {
+                        b.classList.remove('active', 'bg-white/15', 'text-white', 'shadow-sm');
+                        b.classList.add('text-slate-400');
+                    });
+                    btn.classList.add('active', 'bg-white/15', 'text-white', 'shadow-sm');
+                    btn.classList.remove('text-slate-400');
+                    state.mode = btn.dataset.mode;
+                });
+            });
+
+            // Symmetry Buttons
+            const symBtns = document.querySelectorAll('.sym-btn');
+            symBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    symBtns.forEach(b => {
+                        b.classList.remove('active', 'bg-white/15', 'text-white');
+                        b.classList.add('text-slate-400');
+                    });
+                    btn.classList.add('active', 'bg-white/15', 'text-white');
+                    btn.classList.remove('text-slate-400');
+                    state.symmetry = parseInt(btn.dataset.sym, 10);
+                });
+            });
+
+            // Scale Buttons
+            const scaleBtns = document.querySelectorAll('.scale-btn');
+            scaleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    scaleBtns.forEach(b => {
+                        b.classList.remove('active', 'bg-indigo-500/25', 'text-indigo-200', 'border-indigo-400/40');
+                        b.classList.add('bg-black/25', 'text-slate-400', 'border-transparent');
+                    });
+                    btn.classList.add('active', 'bg-indigo-500/25', 'text-indigo-200', 'border-indigo-400/40');
+                    btn.classList.remove('bg-black/25', 'text-slate-400', 'border-transparent');
+                    state.scale = btn.dataset.scale;
+                    if (state.audioEnabled) synth.playChord([0, 2, 4]);
+                });
+            });
+
+            // Theme Buttons
+            const themeBtns = document.querySelectorAll('.theme-btn');
+            themeBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    themeBtns.forEach(b => {
+                        b.classList.remove('active', 'bg-white/15', 'text-white', 'border-white/25');
+                        b.classList.add('bg-black/25', 'text-slate-400', 'border-transparent');
+                    });
+                    btn.classList.add('active', 'bg-white/15', 'text-white', 'border-white/25');
+                    btn.classList.remove('bg-black/25', 'text-slate-400', 'border-transparent');
+                    state.theme = btn.dataset.theme;
+                    statusDot.style.backgroundColor = THEMES[state.theme].dot;
+                    statusDot.style.boxShadow = `0 0 12px ${THEMES[state.theme].dot}`;
+                });
+            });
+
+            // Auto-Play Generative Mode Toggle
+            const autoPlayBtn = document.getElementById('autoPlayBtn');
+            autoPlayBtn.addEventListener('click', () => {
+                state.autoPlay = !state.autoPlay;
+                if (state.autoPlay) {
+                    autoPlayBtn.classList.add('bg-emerald-500/20', 'text-emerald-200', 'border-emerald-400/40');
+                    autoPlayBtn.classList.remove('bg-white/5', 'text-slate-300', 'border-white/10');
+                    autoPlayBtn.innerHTML = '<i data-lucide="pause" class="w-3.5 h-3.5 text-emerald-400"></i><span>Auto-Play</span>';
+                } else {
+                    autoPlayBtn.classList.remove('bg-emerald-500/20', 'text-emerald-200', 'border-emerald-400/40');
+                    autoPlayBtn.classList.add('bg-white/5', 'text-slate-300', 'border-white/10');
+                    autoPlayBtn.innerHTML = '<i data-lucide="play" class="w-3.5 h-3.5 text-emerald-400"></i><span>Auto-Play</span>';
+                }
+                if (window.lucide) lucide.createIcons();
+            });
+
+            // Snapshot Button (Export PNG)
+            document.getElementById('snapshotBtn').addEventListener('click', () => {
+                const link = document.createElement('a');
+                link.download = `prismwave-${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+
+            // Clear Canvas Button
+            document.getElementById('clearBtn').addEventListener('click', () => {
+                ribbonStrokes = [];
+                ripples = [];
+                orbitals = [];
+                sparkles = [];
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = THEMES[state.theme].bg;
+                ctx.fillRect(0, 0, width, height);
+            });
+
+            // Toggle Dock Visibility
+            const toggleUiBtn = document.getElementById('toggleUiBtn');
+            const controlDock = document.getElementById('controlDock');
+            toggleUiBtn.addEventListener('click', () => {
+                state.uiVisible = !state.uiVisible;
+                if (state.uiVisible) {
+                    controlDock.classList.remove('translate-y-36', 'opacity-0', 'pointer-events-none');
+                    toggleUiBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i>';
+                } else {
+                    controlDock.classList.add('translate-y-36', 'opacity-0', 'pointer-events-none');
+                    toggleUiBtn.innerHTML = '<i data-lucide="eye-off" class="w-4 h-4"></i>';
+                }
+                if (window.lucide) lucide.createIcons();
+            });
+
+            // Seed Initial Opening Mandala & Start Render Loop
+            function seedOpeningMandala() {
+                const cx = width / 2;
+                const cy = height / 2;
+                const r = Math.min(width, height) * 0.18;
+                for (let i = 0; i < 24; i++) {
+                    const a1 = (i / 24) * Math.PI * 2;
+                    const a2 = ((i + 1) / 24) * Math.PI * 2;
+                    const x1 = cx + Math.cos(a1) * r;
+                    const y1 = cy + Math.sin(a1) * r * 0.55;
+                    const x2 = cx + Math.cos(a2) * r;
+                    const y2 = cy + Math.sin(a2) * r * 0.55;
+                    ribbonStrokes.push(new RibbonSegment(x1, y1, x2, y2, nextColor(), 3.2, 8));
+                }
+            }
+
+            window.onload = function () {
+                seedOpeningMandala();
+                requestAnimationFrame(render);
+            };
+        })();
+    </script>
+</body>
+</html>
